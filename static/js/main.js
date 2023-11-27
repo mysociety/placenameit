@@ -204,79 +204,6 @@ var copyText = function(text){
     }
 };
 
-// Call the given MapIt API endpoint with the supplied (optional) query params,
-// and return a jQuery Deferred promise, suitable for chaining .then, .done,
-// and .fail onto. If the bypassCache argument is missing or falsey (the 
-// default) then the API response will be stored in the global ajaxCache
-// object, meaning future requests with the same endpoint and params will
-// return immediately. You can pass a truthy value for bypassCache to prevent
-// this (for example, when you always want a fresh response from the API).
-// This function enforces a 1000 millisecond wait after each request,
-// to respect the MapIt API rate limit.
-var getMapItResponseAsync = function(endpoint, params, bypassCache){
-    var dfd = $.Deferred();
-    var params = params || {};
-    var url = "https://mapit.mysociety.org" + endpoint;
-
-    // Create a unique key for this request in the cache.
-    var ajaxCacheKey = url;
-    var querystring = $.param(params);
-    if ( querystring ){
-        ajaxCacheKey += '?' + querystring;
-    }
-
-    if ( ajaxCache.hasOwnProperty(ajaxCacheKey) && ! bypassCache ) {
-        dfd.resolve( ajaxCache[ajaxCacheKey] );
-    } else {
-        $.ajax({
-            url: url,
-            data: $.extend({ api_key: $('#api_key').val() }, params),
-            dataType: "json"
-        }).done(function(response){
-            ajaxCache[ajaxCacheKey] = response;
-            setTimeout(function(){
-                dfd.resolve(response);
-            }, 1000);
-        }).fail(function(jqXHR){
-            setTimeout(function(){
-                dfd.reject(jqXHR.responseJSON.error);
-            }, 1000);
-        });
-    }
-
-    return dfd.promise();
-};
-
-// Given an array of "requests" (each "request" an array of 1-3 arguments
-// suitable for passing to getMapItResponseAsync) this will call
-// getMapItResponseAsync once for each request, sequentially, and return
-// a promise that .then, .done, or .fail can be chained onto. If an
-// eachBefore callback is provided, it will be called before each API request.
-// If eachDone or eachFail callbacks are provided, they will be called after
-// each API request, and passed the API response or error string respectively.
-var sequentialMapItResponses = function(requests, eachBefore, eachDone, eachFail){
-    var eachBefore = eachBefore || function(){};
-    var eachDone = eachDone || function(){};
-    var eachFail = eachFail || function(){};
-
-    return requests.reduce(
-        function(p, request){
-            return p.then(function(){
-                eachBefore(request);
-                return getMapItResponseAsync.apply(
-                    this,
-                    request
-                ).done(
-                    eachDone
-                ).fail(
-                    eachFail
-                );
-            });
-        },
-        $.when()
-    );
-};
-
 createApp({
     delimiters: ["${", "}"], // avoid conflict with Jekyll `{{ }}` delimiters
     data() {
@@ -449,13 +376,56 @@ createApp({
             });
             copyText(text);
         },
+        // Call the given MapIt API endpoint with the supplied (optional) query params,
+        // and return a jQuery Deferred promise, suitable for chaining .then, .done,
+        // and .fail onto. If the bypassCache argument is missing or falsey (the
+        // default) then the API response will be stored in the global ajaxCache
+        // object, meaning future requests with the same endpoint and params will
+        // return immediately. You can pass a truthy value for bypassCache to prevent
+        // this (for example, when you always want a fresh response from the API).
+        // This function enforces a 1000 millisecond wait after each request,
+        // to respect the MapIt API rate limit.
+        getMapItResponseAsync(endpoint, params, bypassCache){
+            var _this = this;
+            var dfd = $.Deferred();
+            var params = params || {};
+            var url = "https://mapit.mysociety.org" + endpoint;
+
+            // Create a unique key for this request in the cache.
+            var ajaxCacheKey = url;
+            var querystring = $.param(params);
+            if ( querystring ){
+                ajaxCacheKey += '?' + querystring;
+            }
+
+            if ( ajaxCache.hasOwnProperty(ajaxCacheKey) && ! bypassCache ) {
+                dfd.resolve( ajaxCache[ajaxCacheKey] );
+            } else {
+                $.ajax({
+                    url: url,
+                    data: $.extend({ api_key: _this.api_key }, params),
+                    dataType: "json"
+                }).done(function(response){
+                    ajaxCache[ajaxCacheKey] = response;
+                    setTimeout(function(){
+                        dfd.resolve(response);
+                    }, 1000);
+                }).fail(function(jqXHR){
+                    setTimeout(function(){
+                        dfd.reject(jqXHR.responseJSON.error);
+                    }, 1000);
+                });
+            }
+
+            return dfd.promise();
+        },
         loadMapItAreas(){
             var _this = this;
             var i = 0;
 
             _this.areas = [];
 
-            sequentialMapItResponses(
+            _this.sequentialMapItResponses(
                 _.map(_this.selected_area_type_ids, function(id){
                     return [
                         '/areas/' + id + '.json'
@@ -505,7 +475,7 @@ createApp({
 
             _this.output_areas = [];
 
-            sequentialMapItResponses(
+            _this.sequentialMapItResponses(
                 _.map(_this.selected_area_ids, function(area_id){
                     return [
                         "/area/" + area_id + "/covers",
@@ -537,7 +507,7 @@ createApp({
 
             _this.map_layer_output_areas.clearLayers();
 
-            sequentialMapItResponses(
+            _this.sequentialMapItResponses(
                 _.map(_this.output_areas, function(area){
                     return [
                         "/area/" + area.mapit_id + ".geojson",
@@ -557,7 +527,7 @@ createApp({
 
             _this.map_layer_selected_areas.clearLayers();
 
-            sequentialMapItResponses(
+            _this.sequentialMapItResponses(
                 _.map(_this.selected_area_ids, function(area_id){
                     return [
                         "/area/" + area_id + ".geojson",
@@ -617,12 +587,42 @@ createApp({
                 pane: "selected_areas"
             }).addTo(_this.map);
         },
+        // Given an array of "requests" (each "request" an array of 1-3 arguments
+        // suitable for passing to getMapItResponseAsync) this will call
+        // getMapItResponseAsync once for each request, sequentially, and return
+        // a promise that .then, .done, or .fail can be chained onto. If an
+        // eachBefore callback is provided, it will be called before each API request.
+        // If eachDone or eachFail callbacks are provided, they will be called after
+        // each API request, and passed the API response or error string respectively.
+        sequentialMapItResponses(requests, eachBefore, eachDone, eachFail){
+            var _this = this;
+            var eachBefore = eachBefore || function(){};
+            var eachDone = eachDone || function(){};
+            var eachFail = eachFail || function(){};
+
+            return requests.reduce(
+                function(p, request){
+                    return p.then(function(){
+                        eachBefore(request);
+                        return _this.getMapItResponseAsync.apply(
+                            _this,
+                            request
+                        ).done(
+                            eachDone
+                        ).fail(
+                            eachFail
+                        );
+                    });
+                },
+                $.when()
+            );
+        },
         verifyMapItApiKey(){
             var _this = this;
             _this.api_key_valid = null;
 
             if ( _this.api_key ) {
-                getMapItResponseAsync(
+                _this.getMapItResponseAsync(
                     '/quota',
                     undefined,
                     true
