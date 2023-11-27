@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="{{ page.lang | default: site.lang | default: 'en' }}" class="no-js">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="initial-scale=1, viewport-fit=cover">
+    <title>{{ page.title | default: site.title | escape }}</title>
+    <link rel="stylesheet" href="{{ '/static/css/main.css' | relative_url }}">
+    <script type="module">document.documentElement.classList.remove('no-js'); document.documentElement.classList.add('js');</script>
+</head>
+<body class="{{ page.bodyclass }}">
+
+    {{ content }}
+
+    <script src="{{ '/static/vendor/jquery/js/jquery-3.7.1.min.js' | relative_url }}"></script>
+    <script src="{{ '/static/vendor/underscore/js/underscore-1.13.6.min.js' | relative_url }}"></script>
+    <script src="{{ '/static/vendor/leaflet/js/leaflet-1.9.4.min.js' | relative_url }}"></script>
+    <script src="{{ '/static/vendor/vue/js/vue-3.3.8.global.prod.min.js' | relative_url }}"></script>
+    <script src="{{ '/static/vendor/bootstrap/js/bootstrap.bundle.min.js' | relative_url }}"></script>
+    <script src="{{ '/static/js/main.js' | relative_url }}"></script>
+
+</body>
+</html>

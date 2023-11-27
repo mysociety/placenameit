@@ -1,0 +1,26 @@
+title: placenameit
+description: >
+  Convert place names into boundaries using
+  mySociety’s MapIt service (mapit.mysociety.org)
+url: "https://mysociety.github.io"
+baseurl: "/placenameit"
+host: 0.0.0.0
+
+exclude:
+  - .browserlistrc
+  - .sass-cache/
+  - .jekyll-cache/
+  - gemfiles/
+  - Gemfile
+  - Gemfile.lock
+  - Makefile
+  - node_modules/
+  - README.md
+  - script/
+  - ssl/
+  - vendor/
+
+sass:
+  sourcemap: never
+  load_paths:
+    - static/vendor/

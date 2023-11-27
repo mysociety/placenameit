@@ -1,0 +1,112 @@
+---
+layout: default
+---
+
+<div id="app" class="vh-100 vw-100">
+
+    <div class="offcanvas offcanvas-start show" tabindex="-1" id="settings" aria-labelledby="settingsLabel">
+        <div class="offcanvas-header border-bottom">
+            <h3 id="settingsLabel" class="mb-0 h5">
+                <span class="text-muted">Placenameit /</span>
+                Settings
+            </h3>
+        </div>
+        <div class="offcanvas-body bg-light">
+            <p>
+                <label for="api_key" class="form-label">MapIt API key</label>
+                <input type="text" id="api_key" class="form-control font-monospace" required v-model="api_key" :class="{ 'is-valid': (api_key_valid == true), 'is-invalid': (api_key_valid == false) }">
+            </p>
+            <fieldset class="mb-3">
+                <legend class="form-label">Place types to search</legend>
+                <div v-for="area_type in input_area_types" class="form-check">
+                    <input class="form-check-input" type="checkbox" :value="area_type.id" :id="`area_type_${ area_type.id }`" v-model="selected_area_type_ids"> <!-- :checked="areaTypeIdIsSelected(area_type.id)" -->
+                    <label class="form-check-label" :for="`area_type_${ area_type.id }`">${ areaTypeName(area_type.id, 'plural') }</label>
+                </div>
+            </fieldset>
+            <p class="mb-0">
+                <button class="btn btn-primary w-100" data-bs-dismiss="offcanvas" @click="loadMapItAreas" :disabled="!api_key_valid">Load places</button>
+            </p>
+        </div>
+    </div>
+
+    <div class="row g-0 vh-100">
+        <div class="col-sm-4 d-flex flex-column border-bottom border-end-sm">
+
+            <div class="p-3 flex-unfill border-bottom d-flex align-items-center">
+                <h3 class="mb-0 h5 me-auto">Placenameit</h3>
+                <button class="btn btn-outline-primary btn-sm d-flex align-items-center gap-2" type="button" data-bs-toggle="offcanvas" data-bs-target="#settings" aria-controls="settings">
+                    {% include bi-gear-fill.html %}
+                    Settings
+                </button>
+            </div>
+            <div class="p-3 flex-unfill border-bottom">
+                <label for="search" class="form-label">Search place names</label>
+                <input type="search" id="search" class="form-control" v-model="search_term" autocomplete="off">
+            </div>
+            <div class="p-3 flex-unfill" v-if="sorted_areas.length == 0 && progress_current != null">
+                <button class="btn btn-primary w-100" @click="loadMapItAreas" :disabled="!api_key_valid">Load places</button>
+            </div>
+            <div class="flex-unfill border-bottom" :class="{ 'd-none': (progress_current == null) }">
+                <div class="p-3">
+                    <p class="fs-7 fw-bold text-primary mb-2">${ progress_message }</p>
+                    <div class="progress" role="progressbar" aria-labelledby="progress_label" :aria-valuenow="progress_current" :aria-valuemax="progress_max" aria-valuemin="0">
+                        <div class="progress-bar" :style="{width: progress_percentage + '%'}"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="h-0 flex-fill overflow-auto">
+                <label v-for="area in sorted_areas" class="p-3 border-bottom d-flex gap-3 align-items-center" :class="{ 'd-none': !areaMatchesSearchTerm(area) }">
+                    <div>
+                        <h3 class="fs-6 fw-normal" v-html="markSearchTermMatches(areaName(area.mapit_id))"></h3>
+                        <p class="fs-8 lh-1 mb-0 text-muted">${ areaTypeName(area.type) }</p>
+                    </div>
+                    <input type="checkbox" class="ms-auto form-check-input" :value="area.mapit_id" v-model="selected_area_ids">
+                </label>
+            </div>
+
+        </div>
+        <div class="col-sm-4 d-flex flex-column align-items-center justify-content-center bg-light border-bottom border-end-sm">
+
+            <div ref="map" class="w-100 h-100"></div>
+
+        </div>
+        <div class="col-sm-4 d-flex flex-column border-bottom">
+
+            <div class="p-3 flex-unfill border-bottom">
+                <label for="output" class="form-label">Output areas</label>
+                <select id="output" class="form-select" v-model="selected_output_area_type_id">
+                    <option v-for="area_type in output_area_types" :value="area_type.id">${ areaTypeName(area_type.id, 'plural') }</option>
+                </select>
+                <fieldset class="mt-3">
+                    <legend class="form-label">Columns</legend>
+                    <div class="d-flex flex-wrap">
+                        <div v-for="column in output_columns" class="form-check form-check-inline">
+                            <input class="form-check-input" type="checkbox" :id="`output-${ column.key }`" :value="column.key" v-model="selected_output_column_keys">
+                            <label class="form-check-label" :for="`output-${ column.key }`">${ column.label }</label>
+                        </div>
+                    </div>
+                </fieldset>
+            </div>
+            <div v-if="output_areas.length" class="flex-fill h-0 overflow-auto">
+                <table class="table table-flush" id="output_table">
+                    <thead>
+                        <tr>
+                            <th v-for="col in selected_output_columns" class="text-nowrap">${ col.label }</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="area in output_areas">
+                            <td v-for="col in selected_output_columns">${ area[col.key] }</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div v-if="output_areas.length" class="p-3 d-flex gap-3 flex-unfill border-top">
+                <button class="btn btn-primary w-50" @click="copyOutputHTML">Copy table</button>
+                <button class="btn btn-outline-primary w-50" @click="copyOutputTSV">Copy as text</button>
+            </div>
+
+        </div>
+    </div>
+
+</div>

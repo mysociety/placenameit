@@ -1,0 +1,14 @@
+.table-flush {
+    tr > :first-child {
+        padding-left: 1rem !important;
+    }
+
+    tr > :last-child {
+        padding-right: 1rem !important;
+    }
+
+    & > tr:last-child,
+    & > :last-child > tr:last-child {
+        --#{$prefix}-border-width: 0;
+    }
+}
