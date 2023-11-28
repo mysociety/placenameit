@@ -12,3 +12,10 @@
         --#{$prefix}-border-width: 0;
     }
 }
+
+tr.disabled {
+    td, th {
+        color: $gray-500 !important;
+        text-decoration: line-through;
+    }
+}

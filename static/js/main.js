@@ -251,7 +251,8 @@ createApp({
                 "mapit_id",
                 "gss",
                 "name",
-            ]
+            ],
+            suppressed_output_area_ids: [],
         }
     },
     computed: {
@@ -363,12 +364,18 @@ createApp({
             return _.findWhere(areaTypes, { id: type })[name];
         },
         copyOutputHTML(){
-            var text = $("#output_table").prop("outerHTML");
+            // Remove .disabled rows.
+            var $table = $("#output_table").clone();
+            $table.find('tr.disabled').remove();
+            // Remove all HTML attributes.
+            $table.removeAttr('id class');
+            $table.find('*').removeAttr('id class');
+            var text = $table.prop("outerHTML");
             copyText(text);
         },
         copyOutputTSV(){
             var text = '';
-            $("#output_table tr").each(function(){
+            $("#output_table tr").not(".disabled").each(function(){
                 text += $(this).children().map(function(){
                     return $(this).text();
                 }).get().join('\t')
@@ -376,43 +383,53 @@ createApp({
             });
             copyText(text);
         },
-        // Call the given MapIt API endpoint with the supplied (optional) query params,
-        // and return a jQuery Deferred promise, suitable for chaining .then, .done,
-        // and .fail onto. If the bypassCache argument is missing or falsey (the
-        // default) then the API response will be stored in the global ajaxCache
-        // object, meaning future requests with the same endpoint and params will
-        // return immediately. You can pass a truthy value for bypassCache to prevent
-        // this (for example, when you always want a fresh response from the API).
-        // This function enforces a 1000 millisecond wait after each request,
-        // to respect the MapIt API rate limit.
-        getMapItResponseAsync(endpoint, params, bypassCache){
+        // Call the given MapIt API endpoint with (optionally) a given set of
+        // query params, and return a jQuery Deferred promise, suitable for
+        // chaining .then, .done, and .fail onto.
+        //
+        // By default, responses are stored in the global ajaxCache, meaning
+        // future requests with the same `endpoint` and `params` will return
+        // immediately.
+        //
+        // `options` argument should be an object with the following keys:
+        // - `endpoint` (eg: "/area/1234.json")
+        // - `extraData`, an object that will be supplied as the second
+        //   argument to any .done or .fail callbacks
+        // - `bypassCache` (default: false), set to true to prevent the
+        //   API response from being saved to or read from the ajaxCache
+        getMapItResponseAsync(options){
             var _this = this;
             var dfd = $.Deferred();
-            var params = params || {};
-            var url = "https://mapit.mysociety.org" + endpoint;
+            var options = $.extend({
+                params: {},
+                extraData: {},
+                bypassCache: false
+            }, options);
+
+            var url = "https://mapit.mysociety.org" + options.endpoint;
 
             // Create a unique key for this request in the cache.
             var ajaxCacheKey = url;
-            var querystring = $.param(params);
+            var querystring = $.param(options.params);
             if ( querystring ){
                 ajaxCacheKey += '?' + querystring;
             }
 
-            if ( ajaxCache.hasOwnProperty(ajaxCacheKey) && ! bypassCache ) {
-                dfd.resolve( ajaxCache[ajaxCacheKey] );
+            if ( ajaxCache.hasOwnProperty(ajaxCacheKey) && ! options.bypassCache ) {
+                dfd.resolve(ajaxCache[ajaxCacheKey], options.extraData);
             } else {
                 $.ajax({
                     url: url,
-                    data: $.extend({ api_key: _this.api_key }, params),
+                    data: $.extend({ api_key: _this.api_key }, options.params),
                     dataType: "json"
                 }).done(function(response){
                     ajaxCache[ajaxCacheKey] = response;
                     setTimeout(function(){
-                        dfd.resolve(response);
+                        dfd.resolve(response, options.extraData);
                     }, 1000);
                 }).fail(function(jqXHR){
                     setTimeout(function(){
-                        dfd.reject(jqXHR.responseJSON.error);
+                        dfd.reject(jqXHR.responseJSON.error, options.extraData);
                     }, 1000);
                 });
             }
@@ -427,9 +444,9 @@ createApp({
 
             _this.sequentialMapItResponses(
                 _.map(_this.selected_area_type_ids, function(id){
-                    return [
-                        '/areas/' + id + '.json'
-                    ];
+                    return {
+                        endpoint: '/areas/' + id + '.json'
+                    };
                 }),
                 function(request){
                     _this.progress_message = "Loading " + _this.areaTypeName(
@@ -477,10 +494,10 @@ createApp({
 
             _this.sequentialMapItResponses(
                 _.map(_this.selected_area_ids, function(area_id){
-                    return [
-                        "/area/" + area_id + "/covers",
-                        { type: _this.selected_output_area_type_id }
-                    ];
+                    return {
+                        endpoint: "/area/" + area_id + "/covers",
+                        params: { type: _this.selected_output_area_type_id }
+                    };
                 }),
                 undefined,
                 function(responseAreas){
@@ -509,18 +526,21 @@ createApp({
 
             _this.sequentialMapItResponses(
                 _.map(_this.output_areas, function(area){
-                    return [
-                        "/area/" + area.mapit_id + ".geojson",
-                        { simplify_tolerance: "0.001" }
-                    ];
+                    return {
+                        endpoint: "/area/" + area.mapit_id + ".geojson",
+                        params: { simplify_tolerance: "0.001" },
+                        extraData: { mapit_id: area.mapit_id }
+                    };
                 }),
                 undefined,
-                function(responseGeoJson){
+                function(responseGeoJson, extraData){
+                    responseGeoJson.properties = { mapit_id: extraData.mapit_id };
                     _this.map_layer_output_areas.addData(responseGeoJson);
-                    _this.map.fitBounds(_this.map_layer_output_areas.getBounds());
                 },
                 undefined
-            );
+            ).then(function(){
+                _this.map.fitBounds(_this.map_layer_output_areas.getBounds());
+            });
         },
         regenerateSelectedAreaPolygons(){
             var _this = this;
@@ -529,18 +549,21 @@ createApp({
 
             _this.sequentialMapItResponses(
                 _.map(_this.selected_area_ids, function(area_id){
-                    return [
-                        "/area/" + area_id + ".geojson",
-                        { simplify_tolerance: "0.001" }
-                    ];
+                    return {
+                        endpoint: "/area/" + area_id + ".geojson",
+                        params: { simplify_tolerance: "0.001" },
+                        extraData: { mapit_id: area_id }
+                    };
                 }),
                 undefined,
-                function(responseGeoJson){
+                function(responseGeoJson, extraData){
+                    responseGeoJson.properties = { mapit_id: extraData.mapit_id };
                     _this.map_layer_selected_areas.addData(responseGeoJson);
-                    _this.map.fitBounds(_this.map_layer_selected_areas.getBounds());
                 },
                 undefined
-            );
+            ).then(function(){
+                _this.map.fitBounds(_this.map_layer_selected_areas.getBounds());
+            });
         },
         setUpMap(){
             var _this = this;
@@ -564,11 +587,22 @@ createApp({
             _this.map_layer_output_areas = L.geoJSON(undefined, {
                 style: { fillOpacity: 0.2, color: "#FC832A" },
                 onEachFeature: function (feature, layer) {
+                    var mapit_id = feature.properties.mapit_id;
                     layer.on('mouseover', function () {
                         this.setStyle({ fillOpacity: 0.4 });
                     });
                     layer.on('mouseout', function () {
                         this.setStyle({ fillOpacity: 0.2 });
+                    });
+                    layer.on('click', function(e){
+                        var i = _this.suppressed_output_area_ids.indexOf(mapit_id);
+                        if ( i == -1 ) {
+                            _this.suppressed_output_area_ids.push(mapit_id);
+                            this.setStyle({ color: "#CCCCCC" });
+                        } else {
+                            _this.suppressed_output_area_ids.splice(i, 1);
+                            this.setStyle({ color: "#FC832A" });
+                        }
                     });
                 },
                 pane: "output_areas"
@@ -576,24 +610,18 @@ createApp({
 
             _this.map_layer_selected_areas = L.geoJSON(undefined, {
                 style: { fillOpacity: 0 },
-                onEachFeature: function (feature, layer) {
-                    layer.on('mouseover', function () {
-                        this.setStyle({ fillOpacity: 0.4 });
-                    });
-                    layer.on('mouseout', function () {
-                        this.setStyle({ fillOpacity: 0 });
-                    });
-                },
+                interactive: false,
                 pane: "selected_areas"
             }).addTo(_this.map);
         },
-        // Given an array of "requests" (each "request" an array of 1-3 arguments
+        // Given an array of "requests" (each "request" an `options` object
         // suitable for passing to getMapItResponseAsync) this will call
-        // getMapItResponseAsync once for each request, sequentially, and return
-        // a promise that .then, .done, or .fail can be chained onto. If an
-        // eachBefore callback is provided, it will be called before each API request.
-        // If eachDone or eachFail callbacks are provided, they will be called after
-        // each API request, and passed the API response or error string respectively.
+        // getMapItResponseAsync once for each request, sequentially, and
+        // return a promise that .then, .done, or .fail can be chained onto.
+        // If an eachBefore callback is provided, it will be called before
+        // each API request. If eachDone or eachFail callbacks are provided,
+        // they will be called after each API request, and passed the API
+        // response or error string respectively.
         sequentialMapItResponses(requests, eachBefore, eachDone, eachFail){
             var _this = this;
             var eachBefore = eachBefore || function(){};
@@ -601,12 +629,11 @@ createApp({
             var eachFail = eachFail || function(){};
 
             return requests.reduce(
-                function(p, request){
+                function(p, options){
                     return p.then(function(){
-                        eachBefore(request);
-                        return _this.getMapItResponseAsync.apply(
-                            _this,
-                            request
+                        eachBefore(options);
+                        return _this.getMapItResponseAsync(
+                            options
                         ).done(
                             eachDone
                         ).fail(
@@ -622,11 +649,10 @@ createApp({
             _this.api_key_valid = null;
 
             if ( _this.api_key ) {
-                _this.getMapItResponseAsync(
-                    '/quota',
-                    undefined,
-                    true
-                ).done(function(response){
+                _this.getMapItResponseAsync({
+                    endpoint: "/quota",
+                    bypassCache: true
+                }).done(function(response){
                     if ( response.quota && response.quota.limit > 50 ) {
                         _this.api_key_valid = true;
                     } else {

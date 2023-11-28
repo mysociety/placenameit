@@ -95,7 +95,7 @@ layout: default
                         </tr>
                     </thead>
                     <tbody>
-                        <tr v-for="area in output_areas">
+                        <tr v-for="area in output_areas" :class="{ 'disabled': (suppressed_output_area_ids.indexOf(area.mapit_id) > -1) }">
                             <td v-for="col in selected_output_columns">${ area[col.key] }</td>
                         </tr>
                     </tbody>
